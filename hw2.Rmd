@@ -1,0 +1,149 @@
+---
+title: "hw2"
+author: "bora yıldırım"
+date: '2022-05-27'
+output: html_document
+---
+
+
+#######################################################
+#Bora Yıldırım
+
+#IE360 HW 2 
+
+#######################################################
+
+setwd("/Users/bora.yildirim/Desktop")
+library(ggplot2)
+library(forecast)
+library(readxl)
+library(zoo)
+install.packages("fpp2")
+library(fpp2)
+install.packages("rmarkdown")
+library(rmarkdown)
+
+
+#I converted the csv data to the excel file to have numeric values
+data_gasoline <- read.csv("IE360_Spring22_HW2_data.csv")
+str(data_gasoline)
+
+as.numeric(data_gasoline$UGS)
+as.numeric(data_gasoline$RNUV)
+as.numeric(data_gasoline$NLPG)
+as.numeric(data_gasoline$PU)
+as.numeric(data_gasoline$PG)
+as.numeric(data_gasoline$NUGV)
+as.numeric(data_gasoline$GNP.Agriculture)
+as.numeric(data_gasoline$GNP.Commerce)
+as.numeric(data_gasoline$GNP.Total)
+
+
+
+
+#Converting quarters into date objects
+new_quarter <- seq(as.Date("2000-01-01"), by="quarter", length.out =32)
+data_gasoline$Quarter <- new_quarter
+
+#Plotting of UGS time series
+UGS_time_series <- ts(data_gasoline$UGS[1:28],start = c(2000,1), frequency = 4 )
+
+plot(UGS_time_series)
+autoplot(UGS_time_series)
+#Data seems to has a decreasing trend line, and it is not stationary
+UGS_decomposed <- decompose(UGS_time_series, type="multiplicative")
+plot(UGS_decomposed)
+
+#I will take the difference between observations to obtain a stationary time series
+
+Diff_UGS_time_series <- diff(UGS_time_series)
+autoplot(Diff_UGS_time_series)
+
+#Time series now seems stationary
+#Now we look at seasonal plot, and the graph shows us that every q2 change between UGS sales is increasing, and every q4 it is decreasing.
+#Our data also has seasonality
+ggseasonplot(Diff_UGS_time_series)
+
+#autocorrelation plot shows us at lag 1 and lag 4 acf is out of the boundary which shows us the seasonality effect.
+acf(data_gasoline$UGS[1:28], 8)
+
+
+
+## forecasting
+
+#seasonal naive method, p-value = 9.137e-09, residual SD=223671.49, residuals seem random, all acf is between %95 conf. interval boundaries
+
+snaive_model_1 <- snaive(Diff_UGS_time_series)
+summary(snaive_model_1)
+checkresiduals(snaive_model_1)
+
+
+#exponential smooting, p-value = 9.203e-11, residual SD(sigma)= 0.1281, residuals seem to have a pattern, some acf crosses %95 conf interval boundaries
+
+es_model_2 <- ets(UGS_time_series)
+summary(es_model_2)
+checkresiduals(es_model_2)
+
+#ARIMA method, d for eliminating the trend, and D for eliminating seasonality, p-value= 2.971e-11, residual SD= 149799.9 , some acf are out of boundaries, residuals seem to have a strong pattern
+
+arima_model_3 <- auto.arima(UGS_time_series[1:28], d= 1, D= 1)
+summary(arima_model_3)
+checkresiduals(arima_model_3)
+
+#linear regression with other independent variables, p-value= 7.027e-09, residual SD= 47250, all acf in the boundaries and relatively have lower values, residuals seem random
+
+lm_model_4 <- lm(UGS[1:28] ~ RNUV[1:28] + NLPG[1:28] + PU[1:28] + PG[1:28] + NUGV[1:28] + NDGV[1:28] + GNP.Agriculture[1:28] + GNP.Commerce[1:28] + GNP.Total[1:28],data_gasoline)
+summary(lm_model_4)
+checkresiduals(lm_model_4)
+
+##Residual standard error: 40090 on 18 degrees of freedom
+##Multiple R-squared:  0.953,	Adjusted R-squared:  0.9295 
+##F-statistic: 40.58 on 9 and 18 DF,  p-value: 3.879e-10
+
+#define seasonality 
+data_gasoline$trend=seq(0,31,by=1)
+
+#define trend
+data_gasoline$quarter=seq(1,4,by=1)
+
+#model with seasonality
+lm_model_5 <- lm(UGS[1:28] ~ RNUV[1:28] + NLPG[1:28] + PU[1:28] + PG[1:28] + NUGV[1:28] + NDGV[1:28] + GNP.Agriculture[1:28] + GNP.Commerce[1:28] + GNP.Total[1:28] + quarter[1:28],data_gasoline)
+summary(lm_model_5)
+checkresiduals(lm_model_5)
+
+##Residual standard error: 38770 on 17 degrees of freedom
+##Multiple R-squared:  0.9585,	Adjusted R-squared:  0.9341 
+##F-statistic: 39.27 on 10 and 17 DF,  p-value: 9.187e-10
+
+#model with trend and seasonality
+lm_model_6 <- lm(UGS[1:28] ~ RNUV[1:28] + NLPG[1:28] + PU[1:28] + PG[1:28] + NUGV[1:28] + NDGV[1:28] + GNP.Agriculture[1:28] + GNP.Commerce[1:28] + GNP.Total[1:28] + quarter[1:28] + trend[1:28],data_gasoline)
+summary(lm_model_6)
+checkresiduals(lm_model_6)
+
+##Residual standard error: 37340 on 16 degrees of freedom
+##Multiple R-squared:  0.9638,	Adjusted R-squared:  0.9389 
+##F-statistic: 38.71 on 11 and 16 DF,  p-value: 2.07e-09
+
+#define lag
+data_gasoline$lag <- NA
+data_gasoline$lag <- dplyr::lag(data_gasoline$UGS)
+
+#model with trend seasonality and lag variables
+lm_model_7 <- lm(UGS[1:28] ~ RNUV[1:28] + NLPG[1:28] + PU[1:28] + PG[1:28] + NUGV[1:28] + NDGV[1:28] + GNP.Agriculture[1:28] + GNP.Commerce[1:28] + GNP.Total[1:28] + quarter[1:28] + trend[1:28] + lag[1:28],data_gasoline)
+summary(lm_model_7)
+checkresiduals(lm_model_7)
+
+lm_model_7 <- lm(UGS ~ RNUV + NLPG + PU + PG + NUGV + NDGV + GNP.Agriculture + GNP.Commerce + GNP.Total + quarter + trend + lag,data_gasoline)
+summary(lm_model_7)
+checkresiduals(lm_model_7)
+#I will use the seventh model due to lower SD, randomness among residuals. Proceeding to forecast...
+
+data_gasoline <- as.data.frame(data_gasoline)
+a29 <- predict(lm_model_7,newdata = data_gasoline[29,3:14])
+a30 <- predict(lm_model_7,newdata = data_gasoline[30,3:14])
+a31 <- predict(lm_model_7,newdata = data_gasoline[31,3:14])
+a32 <- predict(lm_model_7,newdata = data_gasoline[32,3:14])
+
+forecast <- c(a29,a30,a31,a32)
+plot(forecast)
+
