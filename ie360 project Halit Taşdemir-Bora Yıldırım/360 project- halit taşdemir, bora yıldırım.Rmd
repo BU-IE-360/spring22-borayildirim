@@ -1,0 +1,320 @@
+---
+title: "halit bora 360"
+output:
+  pdf_document: default
+  html_document: default
+---
+Introduction:
+
+In this case, our goal was to forecast production values for a plant. We had data of previous production amounts, and we developed a model that will give us future values. We were also given new values through the submission period which helped us to improve our model even better.
+
+Related Literature:
+
+There are some techniques in the literature, and we will try these methods to evaluate which method fits our case better. 
+
+We used following libraries
+```{r message=FALSE, warning=FALSE}
+library(data.table)
+library(reshape2)
+library(GGally)
+library(forecast)
+library(ggplot2)
+library(dplyr)
+library(rmarkdown)
+
+```
+
+Firstly, we read the data and assigned them to p_data and w_data
+
+```{r message=FALSE, warning=FALSE}
+## reading data
+
+p_data <- read.csv("production.csv")
+
+w_data<- read.csv("long_weather.csv")
+
+```
+Then, we transformed the data into a wide format using "dcast" funtion from "data.table" package. As can be seen below, data is in wide format now. 
+```{r message=FALSE, warning=FALSE}
+wide_w<-dcast(w_data, date + hour ~ variable+lat+lon, value.variable = "var")
+head(wide_w)
+```
+After that, we deleted some rows since there was no production data available for those days. We used excel to eliminate data which is included in weather data but not in production data, and synchronize the dates. Below is the updated wide weather data.
+
+```{r message=FALSE, warning=FALSE}
+wide_w_2<-wide_w[!(wide_w$date=="2021-02-20" | wide_w$date=="2021-08-09"|wide_w$date=="2021-08-10"|wide_w$date=="2021-08-11"|wide_w$date=="2022-01-13"|wide_w$date=="2022-01-14"),]
+head(wide_w_2)
+```
+
+Since indexes (rownames) were confusing in terms of checking rows of data, we changed row names to null.
+```{r message=FALSE, warning=FALSE}
+rownames(wide_w_2) <- NULL
+```
+Then, we took first 10896 rows to make dates for weather and production data same. 
+```{r message=FALSE, warning=FALSE}
+wide_putin <- wide_w_2[1:10896,]
+head(wide_putin)
+
+```
+
+
+
+
+After that, we controlled false values due to missing date values in production(p_data). 
+```{r message=FALSE, warning=FALSE}
+a <- as.data.frame(wide_putin$date == p_data$date)
+head(a)
+```
+Then, we defined a new matrix "son" with production and weather data combined.2
+```{r message=FALSE, warning=FALSE}
+son<-cbind(wide_putin,p_data$production)
+head(son)
+```
+
+
+
+Model1: All variables included in this model, to have a overall idea. We observe that the model is insufficient. Autocorrelation plot exceeds %95 confidence interval boundaries, that means we left exploitable information in data.
+```{r message=FALSE, warning=FALSE}
+model_1 <- lm(son$`p_data$production` ~ as.factor(hour) + CLOUD_LOW_LAYER_36.25_33 + CLOUD_LOW_LAYER_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33.5 + CLOUD_LOW_LAYER_36.5_33 + CLOUD_LOW_LAYER_36.5_33.25 +
+                CLOUD_LOW_LAYER_36.5_33.5 + CLOUD_LOW_LAYER_36.75_33 + CLOUD_LOW_LAYER_36.75_33.25 + CLOUD_LOW_LAYER_36.75_33.5 + DSWRF_36.25_33 + DSWRF_36.25_33.25 + DSWRF_36.25_33.5 + DSWRF_36.5_33 +
+                DSWRF_36.5_33.25 + DSWRF_36.5_33.5 + DSWRF_36.75_33 + DSWRF_36.75_33.25 + DSWRF_36.75_33.5 + REL_HUMIDITY_36.25_33 + REL_HUMIDITY_36.25_33.25 + REL_HUMIDITY_36.25_33.5 + REL_HUMIDITY_36.5_33 +
+                REL_HUMIDITY_36.5_33.25 + REL_HUMIDITY_36.5_33.5 + REL_HUMIDITY_36.75_33 + REL_HUMIDITY_36.75_33.25 + REL_HUMIDITY_36.75_33.5 + TEMP_36.25_33 + TEMP_36.25_33.25 + TEMP_36.25_33.5 + TEMP_36.5_33 +
+                TEMP_36.5_33.25 + TEMP_36.5_33.5 + TEMP_36.75_33 + TEMP_36.75_33.25 + TEMP_36.75_33.5 ,data=son)
+summary(model_1)
+checkresiduals(model_1)
+```
+To understand which part of the data is unrelated, we tried to eliminate whole categories such as DSWRF, CLOUD etc. In this model whole DSWRF information is excluded. This model also has high ACF values and an R-squared value close to previous model. 
+```{r message=FALSE, warning=FALSE}
+model_2 <- lm(son$`p_data$production` ~ as.factor(hour) + CLOUD_LOW_LAYER_36.25_33 + CLOUD_LOW_LAYER_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33.5 + CLOUD_LOW_LAYER_36.5_33 + CLOUD_LOW_LAYER_36.5_33.25 +
+                CLOUD_LOW_LAYER_36.5_33.5 + CLOUD_LOW_LAYER_36.75_33 + CLOUD_LOW_LAYER_36.75_33.25 + CLOUD_LOW_LAYER_36.75_33.5 + REL_HUMIDITY_36.25_33 + REL_HUMIDITY_36.25_33.25 + REL_HUMIDITY_36.25_33.5 + REL_HUMIDITY_36.5_33 +
+                REL_HUMIDITY_36.5_33.25 + REL_HUMIDITY_36.5_33.5 + REL_HUMIDITY_36.75_33 + REL_HUMIDITY_36.75_33.25 + REL_HUMIDITY_36.75_33.5 + TEMP_36.25_33 + TEMP_36.25_33.25 + TEMP_36.25_33.5 + TEMP_36.5_33 +
+                TEMP_36.5_33.25 + TEMP_36.5_33.5 + TEMP_36.75_33 + TEMP_36.75_33.25 + TEMP_36.75_33.5 ,data=son)
+summary(model_2)
+checkresiduals(model_2)
+```
+
+Previous approach is continued. This time CLOUD data is excluded. The model ve obtain still seems insufficient. 
+```{r message=FALSE, warning=FALSE}
+model_3 <- lm(son$`p_data$production` ~ as.factor(hour) + DSWRF_36.25_33 + DSWRF_36.25_33.25 + DSWRF_36.25_33.5 + DSWRF_36.5_33 +
+                DSWRF_36.5_33.25 + DSWRF_36.5_33.5 + DSWRF_36.75_33 + DSWRF_36.75_33.25 + DSWRF_36.75_33.5 + REL_HUMIDITY_36.25_33 + REL_HUMIDITY_36.25_33.25 + REL_HUMIDITY_36.25_33.5 + REL_HUMIDITY_36.5_33 +
+                REL_HUMIDITY_36.5_33.25 + REL_HUMIDITY_36.5_33.5 + REL_HUMIDITY_36.75_33 + REL_HUMIDITY_36.75_33.25 + REL_HUMIDITY_36.75_33.5 + TEMP_36.25_33 + TEMP_36.25_33.25 + TEMP_36.25_33.5 + TEMP_36.5_33 +
+                TEMP_36.5_33.25 + TEMP_36.5_33.5 + TEMP_36.75_33 + TEMP_36.75_33.25 + TEMP_36.75_33.5 ,data=son)
+summary(model_3)
+checkresiduals(model_3)
+
+```
+Previous approach is continued. This time humidity data is excluded. The model ve obtain still seems insufficient. 
+```{r message=FALSE, warning=FALSE}
+model_4 <- lm(son$`p_data$production` ~ as.factor(hour) + CLOUD_LOW_LAYER_36.25_33 + CLOUD_LOW_LAYER_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33.5 + CLOUD_LOW_LAYER_36.5_33 + CLOUD_LOW_LAYER_36.5_33.25 +
+                CLOUD_LOW_LAYER_36.5_33.5 + CLOUD_LOW_LAYER_36.75_33 + CLOUD_LOW_LAYER_36.75_33.25 + CLOUD_LOW_LAYER_36.75_33.5 + DSWRF_36.25_33 + DSWRF_36.25_33.25 + DSWRF_36.25_33.5 + DSWRF_36.5_33 +
+                DSWRF_36.5_33.25 + DSWRF_36.5_33.5 + DSWRF_36.75_33 + DSWRF_36.75_33.25 + DSWRF_36.75_33.5 + TEMP_36.25_33 + TEMP_36.25_33.25 + TEMP_36.25_33.5 + TEMP_36.5_33 +
+                TEMP_36.5_33.25 + TEMP_36.5_33.5 + TEMP_36.75_33 + TEMP_36.75_33.25 + TEMP_36.75_33.5 ,data=son)
+summary(model_4)
+checkresiduals(model_4)
+
+```
+
+Previous approach is continued. This time temp data is excluded. The model we obtain still seems insufficient. 
+```{r message=FALSE, warning=FALSE}
+
+model_5 <- lm(son$`p_data$production` ~ as.factor(hour) + CLOUD_LOW_LAYER_36.25_33 + CLOUD_LOW_LAYER_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33.5 + CLOUD_LOW_LAYER_36.5_33 + CLOUD_LOW_LAYER_36.5_33.25 +
+                 CLOUD_LOW_LAYER_36.5_33.5 + CLOUD_LOW_LAYER_36.75_33 + CLOUD_LOW_LAYER_36.75_33.25 + CLOUD_LOW_LAYER_36.75_33.5 + DSWRF_36.25_33 + DSWRF_36.25_33.25 + DSWRF_36.25_33.5 + DSWRF_36.5_33 +
+                 DSWRF_36.5_33.25 + DSWRF_36.5_33.5 + DSWRF_36.75_33 + DSWRF_36.75_33.25 + DSWRF_36.75_33.5 + REL_HUMIDITY_36.25_33 + REL_HUMIDITY_36.25_33.25 + REL_HUMIDITY_36.25_33.5 + REL_HUMIDITY_36.5_33 +
+                 REL_HUMIDITY_36.5_33.25 + REL_HUMIDITY_36.5_33.5 + REL_HUMIDITY_36.75_33 + REL_HUMIDITY_36.75_33.25 + REL_HUMIDITY_36.75_33.5,data=son)
+summary(model_5)
+checkresiduals(model_5)
+
+```
+
+We looked at correlation between production and all given information about all 9 locations to determine which info at location "x" has the most importance for our forecast. 
+```{r message=FALSE, warning=FALSE}
+cor(son$`p_data$production`,son$TEMP_36.25_33)
+cor(son$`p_data$production`,son$TEMP_36.25_33.25) ## best one
+cor(son$`p_data$production`,son$TEMP_36.25_33.5)
+cor(son$`p_data$production`,son$TEMP_36.5_33)
+cor(son$`p_data$production`,son$TEMP_36.5_33.25)
+cor(son$`p_data$production`,son$TEMP_36.5_33.5)
+cor(son$`p_data$production`,son$TEMP_36.75_33)
+cor(son$`p_data$production`,son$TEMP_36.75_33.25)
+cor(son$`p_data$production`,son$TEMP_36.75_33.5)
+
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.25_33) ## best one
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.25_33.25) 
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.25_33.5)
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.5_33)
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.5_33.25)
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.5_33.5)
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.75_33)
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.75_33.25)
+cor(son$`p_data$production`,son$CLOUD_LOW_LAYER_36.75_33.5)
+
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.25_33)
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.25_33.25) 
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.25_33.5)
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.5_33)
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.5_33.25)
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.5_33.5)  ## best one
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.75_33)
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.75_33.25)
+cor(son$`p_data$production`,son$REL_HUMIDITY_36.75_33.5)
+
+cor(son$`p_data$production`,son$DSWRF_36.25_33)
+cor(son$`p_data$production`,son$DSWRF_36.25_33.25) 
+cor(son$`p_data$production`,son$DSWRF_36.25_33.5)
+cor(son$`p_data$production`,son$DSWRF_36.5_33) ## best one
+cor(son$`p_data$production`,son$DSWRF_36.5_33.25) 
+cor(son$`p_data$production`,son$DSWRF_36.5_33.5)
+cor(son$`p_data$production`,son$DSWRF_36.75_33)
+cor(son$`p_data$production`,son$DSWRF_36.75_33.25)
+cor(son$`p_data$production`,son$DSWRF_36.75_33.5)
+
+```
+According to correlation analysis we just made, we decided to add data which has highest correlations with production from each category
+```{r message=FALSE, warning=FALSE}
+model_6 <- lm(son$`p_data$production` ~ as.factor(hour) + TEMP_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33 + REL_HUMIDITY_36.5_33.5 + DSWRF_36.5_33, data=son  )
+summary(model_6)
+checkresiduals(model_6)
+```
+
+We converted our data to a time series.Then, we plotted the data and examined it and saw that there is a high seasonality in data. We also added seasonality and trend data to make our model even better. 
+```{r message=FALSE, warning=FALSE}
+
+son$date <- as.Date(son$date)
+son_ts <- ts(son$`p_data$production`, freq=12, start=c(2021,2))
+dec_son_ts <-decompose(son_ts,type="additive")
+plot(dec_son_ts)
+
+son$trend=seq(0,10895,by=1)
+son$quarter=seq(1,4,by=1)
+```
+
+Trend and seasonality variables didn't improve our model significantly. The model still has high ACF values. 
+```{r message=FALSE, warning=FALSE}
+model_7 <- lm(son$`p_data$production` ~as.factor(quarter) + as.factor(hour) + trend + TEMP_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33 + REL_HUMIDITY_36.5_33.5 + DSWRF_36.5_33, data=son  )
+summary(model_7)
+checkresiduals(model_7)
+
+
+```
+
+We decided that trend data is not efficient to improve our model. Thus, we tried to define a lag variable to check its performance.
+```{r message=FALSE, warning=FALSE}
+son$lag24 <- NA
+son$lag24 <- dplyr::lag(son$`p_data$production`)
+```
+As can be seen, lag variable played a significant role in improving our model. But still some ACF values are not that good.
+```{r message=FALSE, warning=FALSE}
+model_8 <- lm(son$`p_data$production` ~as.factor(quarter)+ lag24 + as.factor(hour) + TEMP_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33 + REL_HUMIDITY_36.5_33.5 + DSWRF_36.5_33, data=son  )
+summary(model_8)
+checkresiduals(model_8)
+
+```
+
+Then, just in case, we checked internal correlations to make sure our model does not suffer multicolinearity.
+```{r message=FALSE, warning=FALSE}
+cor(son$TEMP_36.25_33.25,son$CLOUD_LOW_LAYER_36.25_33)
+cor(son$TEMP_36.25_33.25,son$REL_HUMIDITY_36.5_33.5)
+cor(son$TEMP_36.25_33.25,son$DSWRF_36.5_33)
+cor(son$CLOUD_LOW_LAYER_36.25_33,son$REL_HUMIDITY_36.5_33.5)
+cor(son$CLOUD_LOW_LAYER_36.25_33,son$DSWRF_36.5_33)
+cor(son$REL_HUMIDITY_36.5_33.5,son$DSWRF_36.5_33)
+
+```
+
+In this model, we merged previous observations about multicolinearity with seasonality and lag variables. We eliminated some of the data chosen with respect to highest correlations with production, by examining multicolinearity among these best ones. We excluded humidity since it has the highest correlations compared to other variables in the model.
+```{r message=FALSE, warning=FALSE}
+model_9 <- lm(son$`p_data$production` ~as.factor(quarter)+ lag24 + as.factor(hour) + TEMP_36.25_33.25 + CLOUD_LOW_LAYER_36.25_33 + DSWRF_36.5_33, data=son  )
+summary(model_9)
+checkresiduals(model_9)
+```
+In this model, we excluded temp too. Because temp also had high correlations with other variables. However, there is no improvement in terms of R-squared values.
+```{r message=FALSE, warning=FALSE}
+model_10 <- lm(son$`p_data$production` ~as.factor(quarter)+ lag24 + as.factor(hour) + CLOUD_LOW_LAYER_36.25_33 + DSWRF_36.5_33, data=son  )
+summary(model_10)
+checkresiduals(model_10)
+
+```
+Model still has a close R-squared value compared to the previous model. Therefore, to eliminate multicolinearity further, we excluded DSWRF as well.
+```{r message=FALSE, warning=FALSE}
+model_11 <- lm(son$`p_data$production` ~as.factor(quarter)+ lag24 + as.factor(hour) + CLOUD_LOW_LAYER_36.25_33, data=son  )
+summary(model_11)
+checkresiduals(model_11)
+
+```
+
+
+Since DSWRF and hour variables have high correlations, we tried excluding hour instead of DSWRF variable
+```{r message=FALSE, warning=FALSE}
+model_12 <- lm(son$`p_data$production` ~as.factor(quarter)+ lag24  + CLOUD_LOW_LAYER_36.25_33 + DSWRF_36.5_33, data=son  )
+summary(model_12)
+checkresiduals(model_12)
+
+```
+
+
+We updated our data 2 times to achieve better results with our model.
+```{r message=FALSE, warning=FALSE}
+## as of may 27 new data is introduced
+new_production <- read.csv("2022-05-27_production.csv")
+new_weather <-  read.csv("2022-05-27_weather.csv")
+wide_new_weather <- dcast(new_weather, date + hour   ~ variable+lat+lon, value.variable = "var")
+
+
+new_production <- new_production[c(10897:11352),]
+wide_new_weather <- wide_new_weather[c(11041:11664),]
+
+rownames(new_production) <- NULL
+rownames(wide_new_weather) <- NULL
+
+wide_new_weather <- wide_new_weather[c(1:456),]
+rownames(wide_new_weather) <- NULL
+
+new_son <- cbind(wide_new_weather,new_production$production)
+new_son$trend=seq(0,455,by=1)
+new_son$quarter=seq(1,4,by=1)
+
+new_son$lag24 <- NA
+new_son$lag24 <- dplyr::lag(new_son$`new_production$production`)
+
+
+colnames(new_son)  <- colnames(son)
+son_son <- rbind(son,new_son)
+
+## as of may 30 new data is introduced
+new_production_30 <- read.csv("2022-05-29_production.csv")
+new_weather_30 <-  read.csv("2022-05-29_weather.csv")
+wide_new_weather_30 <- dcast(new_weather, date + hour   ~ variable+lat+lon, value.variable = "var")
+
+wide_new_weather_30 <- wide_new_weather_30[c(11497:11544),]
+
+rownames(new_production_30) <- NULL
+rownames(wide_new_weather_30) <- NULL
+
+new_son_30 <- cbind(wide_new_weather_30,new_production_30$production)
+new_son_30$trend=seq(0,47,by=1)
+new_son_30$quarter=seq(1,4,by=1)
+
+new_son_30$lag24 <- NA
+new_son_30$lag24 <- dplyr::lag(new_son_30$`new_production_30$production`)
+
+colnames(new_son_30)  <- colnames(son)
+son_son_30 <- rbind(son_son,new_son_30)
+```
+
+We examine all our models, and we decided that model "x" is the best fit for our case. All of our submissions made using this model.
+```{r message=FALSE, warning=FALSE}
+#prediction_set = son$tahmin
+#tahmin=predict(model_11,newdata=)
+#for(i in 1:24) {
+#  prediction_set[i,1] = predict(model_11,newdata = prediction_set[i,])
+#  if(i<25){
+#    prediction_set[i+1,"lag24"] = prediction_set[i,1] 
+#  }
+#}
+
+#tail(tahmin,n=24
+#     )
+```
+Conclusion:
+
+Our selected model(model_11) doesn't meet all conditions for being a fully proper model. Our residuals seem random, but some of the ACF values exceed %95 confidence interval boundaries. Yet, model's R-squared value is pretty satisfactory. This model's forecast ability is clearly higher than others. For similar tasks, additional data can be used to further improve forecasts. For instance, solar panel condition(wear off) can be defined as a coefficient, and can be added to original data.
